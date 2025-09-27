@@ -1,45 +1,39 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
+// App.tsx
+import * as React from "react";
+import { StatusBar } from "react-native";
+import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import Landing from "./src/screens/Landing";
+import LeagueHome from "./src/screens/LeagueHome";
+import theme from "./src/theme";
 
-import { NewAppScreen } from '@react-native/new-app-screen';
-import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
-import {
-  SafeAreaProvider,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
+export type RootStackParamList = {
+  Landing: undefined;
+  LeagueHome: { league: "MLB" | "NFL" };
+};
 
-function App() {
-  const isDarkMode = useColorScheme() === 'dark';
+const Stack = createNativeStackNavigator<RootStackParamList>();
+
+export default function App() {
+  const navTheme = {
+    ...DefaultTheme,
+    colors: {
+      ...DefaultTheme.colors,
+      background: theme.colors.bg,
+      card: theme.colors.bg,
+      primary: theme.colors.primary,
+      text: theme.colors.text,
+      border: "transparent",
+    },
+  };
 
   return (
-    <SafeAreaProvider>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <AppContent />
-    </SafeAreaProvider>
+    <NavigationContainer theme={navTheme}>
+      <StatusBar barStyle="light-content" />
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="Landing" component={Landing} />
+        <Stack.Screen name="LeagueHome" component={LeagueHome} />
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 }
-
-function AppContent() {
-  const safeAreaInsets = useSafeAreaInsets();
-
-  return (
-    <View style={styles.container}>
-      <NewAppScreen
-        templateFileName="App.tsx"
-        safeAreaInsets={safeAreaInsets}
-      />
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-});
-
-export default App;
