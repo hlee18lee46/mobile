@@ -9,7 +9,8 @@ import Landing from "./src/screens/Landing";
 import LeagueHome from "./src/screens/LeagueHome";
 import GameDetail from "./src/screens/GameDetail";
 import theme from "./src/theme";
-
+import { enableScreens } from "react-native-screens";
+enableScreens(false);
 export type RootStackParamList = {
   Landing: undefined;
   LeagueHome: { league: "MLB" | "NFL" };

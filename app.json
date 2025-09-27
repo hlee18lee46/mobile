@@ -1,4 +1,7 @@
 {
   "name": "MySportsApp",
-  "displayName": "MySportsApp"
+  "displayName": "MySportsApp",
+  "android": {
+    "package": "com.anonymous.mysportsapp"
+  }
 }

@@ -1,4 +1,4 @@
-package com.mysportsapp
+package com.anonymous.mysportsapp
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

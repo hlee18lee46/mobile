@@ -1,4 +1,4 @@
-package com.mysportsapp
+package com.anonymous.mysportsapp
 
 import android.app.Application
 import com.facebook.react.PackageList
