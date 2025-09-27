@@ -7,6 +7,7 @@ import BasesDiamond from "../components/BasesDiamond";
 import CountBox from "../components/CountBox";
 import ChatRoom from "../components/ChatRoom";
 import { fetchLive, type LiveGame } from "../api/live";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 type Props = NativeStackScreenProps<RootStackParamList, "GameDetail">;
 
@@ -15,6 +16,8 @@ export default function GameDetail({ route }: Props) {
   const [live, setLive] = useState<LiveGame | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const insets = useSafeAreaInsets();
+  const EXTRA_TOP = 0; // tweak this to taste (e.g., 24–40)
 
   const load = useCallback(async () => {
     try {
@@ -53,9 +56,13 @@ export default function GameDetail({ route }: Props) {
   }
 
   return (
+
     <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
       {/* Live panel (non-scrolling) */}
-      <View style={s.panel}>
+          <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.bg }} edges={["top", "left", "right"]}>
+      {/* Top spacer = safe area + extra */}
+      <View style={{ height: insets.top + EXTRA_TOP }} />
+      <View style={[s.panel, { paddingTop: Math.max(16, insets.top * 0.5) }]}>
         <Text style={s.title}>{away} @ {home}</Text>
         <Text style={s.meta}>
           {live?.status ?? ""}{live?.inning_desc ? ` • ${live?.inning_desc}` : ""}
@@ -75,6 +82,7 @@ export default function GameDetail({ route }: Props) {
         <Text style={s.bp}>🧢 Batter: {live?.batter?.name ?? "—"}</Text>
         <Text style={s.bp}>⚾ Pitcher: {live?.pitcher?.name ?? "—"}</Text>
       </View>
+    </SafeAreaView>
 
       {/* Chat takes the rest and scrolls */}
       <View style={{ flex: 1 }}>
@@ -86,8 +94,13 @@ export default function GameDetail({ route }: Props) {
 
 const s = StyleSheet.create({
   center:{ flex:1, alignItems:"center", justifyContent:"center" },
-  panel:{ padding:16, borderBottomWidth:0.5, borderColor:"rgba(255,255,255,0.12)" },
-  title:{ color:"#fff", fontSize:20, fontWeight:"900" },
+  panel: {
+    paddingTop: 20,         // ↑ more air at the top
+    paddingHorizontal: 16,  // left/right padding
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.08)",
+  },  title:{ color:"#fff", fontSize:20, fontWeight:"900" },
   meta:{ color: theme.colors.subtext, marginTop:6 },
   scoreRow:{ flexDirection:"row", justifyContent:"space-between", marginTop:10, marginBottom:6 },
   score:{ color:"#fff", fontWeight:"800", fontSize:18 },
