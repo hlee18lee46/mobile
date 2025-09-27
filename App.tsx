@@ -3,13 +3,17 @@ import * as React from "react";
 import { StatusBar } from "react-native";
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+
 import Landing from "./src/screens/Landing";
 import LeagueHome from "./src/screens/LeagueHome";
+import GameDetail from "./src/screens/GameDetail";
 import theme from "./src/theme";
 
 export type RootStackParamList = {
   Landing: undefined;
   LeagueHome: { league: "MLB" | "NFL" };
+  GameDetail: { gamePk: number; home: string; away: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -28,12 +32,15 @@ export default function App() {
   };
 
   return (
-    <NavigationContainer theme={navTheme}>
-      <StatusBar barStyle="light-content" />
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="Landing" component={Landing} />
-        <Stack.Screen name="LeagueHome" component={LeagueHome} />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <SafeAreaProvider>
+      <NavigationContainer theme={navTheme}>
+        <StatusBar barStyle="light-content" />
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="Landing" component={Landing} />
+          <Stack.Screen name="LeagueHome" component={LeagueHome} />
+          <Stack.Screen name="GameDetail" component={GameDetail} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }
