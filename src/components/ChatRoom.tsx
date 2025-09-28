@@ -1,4 +1,3 @@
-// src/components/ChatRoom.tsx
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   View,
@@ -11,12 +10,6 @@ import {
   Platform,
 } from "react-native";
 import { fetchChat, sendChat, ChatMsg } from "../api/chat";
-import {
-  fetchLatestQuiz,
-  voteQuiz,
-  fetchLeaderboard,
-  type Quiz,
-} from "../api/quiz";
 
 type Props = { gamePk: number; defaultName?: string };
 
@@ -28,14 +21,6 @@ export default function ChatRoom({ gamePk, defaultName = "You" }: Props) {
   const [err, setErr] = useState<string | null>(null);
   const lastTs = useRef<string | undefined>(undefined);
   const listRef = useRef<FlatList<ChatMsg>>(null);
-
-  // Quiz state
-  const [quiz, setQuiz] = useState<Quiz | null>(null);
-  const [selected, setSelected] = useState<number | null>(null);
-  const [revealAt, setRevealAt] = useState<number | null>(null);
-  const [revealed, setRevealed] = useState<boolean>(false);
-  const [correctIndex, setCorrectIndex] = useState<number | null>(null);
-  const [myScore, setMyScore] = useState<number>(0);
 
   const scrollToBottom = () =>
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50);
@@ -61,69 +46,6 @@ export default function ChatRoom({ gamePk, defaultName = "You" }: Props) {
     return () => clearInterval(t);
   }, [load]);
 
-  const pullQuiz = useCallback(async () => {
-    try {
-      const q = await fetchLatestQuiz(gamePk);
-      if (!q) return;
-      if (quiz?.quizId !== q.quizId) {
-        setQuiz(q);
-        setSelected(null);
-        setRevealed(false);
-        setCorrectIndex(null);
-        setRevealAt(null);
-      }
-    } catch {}
-  }, [gamePk, quiz?.quizId]);
-
-  useEffect(() => {
-    pullQuiz();
-    const t = setInterval(pullQuiz, 30_000);
-    return () => clearInterval(t);
-  }, [pullQuiz]);
-
-  useEffect(() => {
-    if (!revealAt) return;
-    const tick = setInterval(() => {
-      if (Date.now() >= revealAt && !revealed) setRevealed(true);
-    }, 200);
-    return () => clearInterval(tick);
-  }, [revealAt, revealed]);
-
-  const postLeaderboard = useCallback(async () => {
-    try {
-      const top = await fetchLeaderboard(gamePk, 5);
-      if (!top.length) return;
-      const lines = top.map((r, i) => `${i + 1}. ${r.name} — ${r.score}`).join("\n");
-      const sys: ChatMsg = {
-        gamePk,
-        name: "🏆 QuizBot",
-        text: `Leaderboard update:\n${lines}`,
-        ts: new Date().toISOString(),
-      };
-      setItems((prev) => [...prev, sys]);
-      scrollToBottom();
-    } catch {}
-  }, [gamePk]);
-
-  useEffect(() => {
-    const t = setInterval(postLeaderboard, 120_000);
-    return () => clearInterval(t);
-  }, [postLeaderboard]);
-
-  const onVote = async (idx: number) => {
-    if (!quiz || selected !== null) return;
-    setSelected(idx);
-    try {
-      const res = await voteQuiz(gamePk, quiz.quizId, name || "You", idx);
-      setCorrectIndex(res.correctIndex);
-      setMyScore(res.myScore);
-      setRevealAt(Date.now() + 5000);
-    } catch (e: any) {
-      setErr(e?.message ?? "Vote failed");
-      setSelected(null);
-    }
-  };
-
   async function onSend() {
     const t = text.trim();
     if (!t) return;
@@ -143,65 +65,8 @@ export default function ChatRoom({ gamePk, defaultName = "You" }: Props) {
     }
   }
 
-  const renderQuiz = () => {
-    if (!quiz) return null;
-    const expired = quiz.expiresAt && Date.now() > new Date(quiz.expiresAt).getTime();
-
-    return (
-      <View style={q.card}>
-        <Text style={q.label}>Pop Quiz</Text>
-        <Text style={q.qtext}>{quiz.question}</Text>
-        <View style={{ height: 8 }} />
-
-        {quiz.options.map((opt, i) => {
-          const isPicked = selected === i;
-          const showReveal = revealed && correctIndex != null;
-          const isDisabled = selected !== null || !!expired;
-
-          const correctStyle = showReveal && correctIndex === i ? q.optCorrect : null;
-          const wrongStyle = showReveal && isPicked && correctIndex !== i ? q.optWrong : null;
-
-          return (
-            <Pressable
-              key={`${quiz.quizId}-${i}`}
-              onPress={!isDisabled ? () => onVote(i) : undefined}
-              accessibilityState={{ disabled: isDisabled }}
-              style={[
-                q.option,
-                isPicked && q.optionPicked,
-                correctStyle,
-                wrongStyle,
-                isDisabled && q.optionDisabled,
-              ]}
-            >
-              <Text style={q.optText}>
-                {String.fromCharCode(65 + i)}. {opt}
-              </Text>
-            </Pressable>
-          );
-        })}
-
-        {selected === null && !revealed ? (
-          <Text style={q.hint}>Tap an option to vote.</Text>
-        ) : !revealed ? (
-          <Text style={q.hint}>Answer locked. Revealing in 5s…</Text>
-        ) : (
-          <Text style={q.hint}>
-            {correctIndex != null && selected != null
-              ? selected === correctIndex
-                ? `✅ Correct! Your score: ${myScore}`
-                : `❌ Incorrect. Correct answer is ${String.fromCharCode(65 + correctIndex)}. Your score: ${myScore}`
-              : "Results revealed."}
-          </Text>
-        )}
-      </View>
-    );
-  };
-
   return (
     <View style={{ flex: 1 }}>
-      {renderQuiz()}
-
       <FlatList
         ref={listRef}
         data={items}
@@ -283,48 +148,4 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-});
-
-const q = StyleSheet.create({
-  card: {
-    margin: 12,
-    marginBottom: 4,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.18)",
-    backgroundColor: "rgba(255,255,255,0.05)",
-  },
-  label: {
-    color: "#A7F3D0",
-    fontWeight: "900",
-    marginBottom: 4,
-    fontSize: 12,
-    letterSpacing: 0.5,
-  },
-  qtext: { color: "#fff", fontWeight: "800", fontSize: 15 },
-  option: {
-    marginTop: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
-    backgroundColor: "rgba(255,255,255,0.04)",
-  },
-  optionPicked: {
-    borderColor: "#93C5FD",
-    backgroundColor: "rgba(147,197,253,0.12)",
-  },
-  optionDisabled: { opacity: 0.85 },
-  optCorrect: {
-    borderColor: "#34D399",
-    backgroundColor: "rgba(52,211,153,0.18)",
-  },
-  optWrong: {
-    borderColor: "#F87171",
-    backgroundColor: "rgba(248,113,113,0.18)",
-  },
-  optText: { color: "#fff", fontWeight: "700" },
-  hint: { color: "rgba(255,255,255,0.7)", marginTop: 10, fontSize: 12 },
 });

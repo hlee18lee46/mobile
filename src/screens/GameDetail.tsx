@@ -110,7 +110,8 @@ export default function GameDetail({ route }: Props) {
 
       {/* Chat */}
       <View style={{ flex: 1 }}>
-        <QuizBanner gamePk={gamePk} name={"Han"} />
+          <QuizBanner gamePk={gamePk} name={"User"} />
+
         <ChatRoom gamePk={gamePk} />
       </View>
 

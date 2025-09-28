@@ -15,12 +15,16 @@ export default function MLB() {
   const [games, setGames] = useState<Game[]>([]);
   const pollRef = useRef<IntervalId | null>(null);
 
+// 🔒 Hard-coded date override for "Today"
+const HARD_CODED_DATE = "2025-09-27"; // <= change this when needed
+
+
   const load = useCallback(async () => {
     setErr(null);
     setLoading(true);
     try {
       const data =
-        tab === "TODAY" ? await fetchTodayGames()
+        tab === "TODAY" ? await fetchTodayGames(HARD_CODED_DATE)
         : tab === "SCHEDULE" ? await fetchSchedule(7)
         : [];
       setGames(data);
