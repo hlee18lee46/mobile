@@ -9,6 +9,7 @@ import theme from "../theme";
 import BasesDiamond from "../components/BasesDiamond";
 import CountBox from "../components/CountBox";
 import ChatRoom from "../components/ChatRoom";
+import QuizBanner from "../components/QuizBanner";
 import PlayerStatSheet from "../components/PlayerStatSheet";
 import { fetchLive, type LiveGame } from "../api/live";
 
@@ -109,6 +110,7 @@ export default function GameDetail({ route }: Props) {
 
       {/* Chat */}
       <View style={{ flex: 1 }}>
+        <QuizBanner gamePk={gamePk} name={"Han"} />
         <ChatRoom gamePk={gamePk} />
       </View>
 

@@ -11,13 +11,14 @@ import {
   Platform,
 } from "react-native";
 import { fetchChat, sendChat, ChatMsg } from "../api/chat";
+import {
+  fetchLatestQuiz,
+  voteQuiz,
+  fetchLeaderboard,
+  type Quiz,
+} from "../api/quiz";
 
 type Props = { gamePk: number; defaultName?: string };
-
-// === Engagement config ===
-const QUIZ_MS = 30_000; // every 30s
-const LEADER_MS = 120_000; // every 2m
-const API_BASE = "https://livesports-beta.vercel.app"; // change to http://localhost:3000 for local dev
 
 export default function ChatRoom({ gamePk, defaultName = "You" }: Props) {
   const [name, setName] = useState(defaultName);
@@ -25,50 +26,27 @@ export default function ChatRoom({ gamePk, defaultName = "You" }: Props) {
   const [items, setItems] = useState<ChatMsg[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-
   const lastTs = useRef<string | undefined>(undefined);
   const listRef = useRef<FlatList<ChatMsg>>(null);
 
-  // ---------- helpers ----------
-  const scrollToEnd = () =>
+  // Quiz state
+  const [quiz, setQuiz] = useState<Quiz | null>(null);
+  const [selected, setSelected] = useState<number | null>(null);
+  const [revealAt, setRevealAt] = useState<number | null>(null);
+  const [revealed, setRevealed] = useState<boolean>(false);
+  const [correctIndex, setCorrectIndex] = useState<number | null>(null);
+  const [myScore, setMyScore] = useState<number>(0);
+
+  const scrollToBottom = () =>
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50);
 
-  const pushSystem = (systemText: string) => {
-    setItems((prev) => [
-      ...prev,
-      {
-        gamePk,
-        name: "Quiz",
-        text: systemText,
-        ts: new Date().toISOString(),
-      } as ChatMsg,
-    ]);
-    scrollToEnd();
-  };
-
-  const fmtQuiz = (q: any) => {
-    if (!q) return "";
-    const opts = Array.isArray(q.options)
-      ? q.options.map((o: string, i: number) => `${i + 1}) ${o}`).join("   ")
-      : "";
-    const detail = q.detail ? ` ${q.detail}` : "";
-    return `${q.question ?? "Pop quiz!"}${detail}\n${opts}`;
-  };
-
-  const fmtLeaderboard = (data: any) => {
-    const rows = Array.isArray(data?.leaders) ? data.leaders.slice(0, 5) : [];
-    if (!rows.length) return "No votes yet. Be the first!";
-    return rows.map((r: any, i: number) => `${i + 1}. ${r.name} — ${r.points} pts`).join("\n");
-  };
-
-  // ---------- chat polling ----------
   const load = useCallback(async () => {
     try {
       const chunk = await fetchChat(gamePk, lastTs.current);
       if (chunk.length) {
         lastTs.current = chunk[chunk.length - 1].ts;
         setItems((prev) => [...prev, ...chunk]);
-        scrollToEnd();
+        scrollToBottom();
       }
       setLoading(false);
     } catch (e: any) {
@@ -78,66 +56,78 @@ export default function ChatRoom({ gamePk, defaultName = "You" }: Props) {
   }, [gamePk]);
 
   useEffect(() => {
-    setItems([]); // reset when switching games
-    lastTs.current = undefined;
-    setLoading(true);
-    setErr(null);
     load();
-    const t = setInterval(load, 2000); // poll chat every 2s
+    const t = setInterval(load, 2000);
     return () => clearInterval(t);
   }, [load]);
 
-  // ---------- engagement timers (quiz + leaderboard) ----------
+  const pullQuiz = useCallback(async () => {
+    try {
+      const q = await fetchLatestQuiz(gamePk);
+      if (!q) return;
+      if (quiz?.quizId !== q.quizId) {
+        setQuiz(q);
+        setSelected(null);
+        setRevealed(false);
+        setCorrectIndex(null);
+        setRevealAt(null);
+      }
+    } catch {}
+  }, [gamePk, quiz?.quizId]);
+
   useEffect(() => {
-    let cancelled = false;
-    let quizTimer: ReturnType<typeof setInterval> | null = null;
-    let leadTimer: ReturnType<typeof setInterval> | null = null;
+    pullQuiz();
+    const t = setInterval(pullQuiz, 30_000);
+    return () => clearInterval(t);
+  }, [pullQuiz]);
 
-    const fireQuiz = async () => {
-      try {
-        const r = await fetch(`${API_BASE}/api/engagement/quiz?gamePk=${gamePk}`);
-        const data = await r.json();
-        if (cancelled) return;
-        if (data?.success && data?.quiz) {
-          pushSystem(fmtQuiz(data.quiz));
-        }
-      } catch {
-        /* ignore */
-      }
-    };
+  useEffect(() => {
+    if (!revealAt) return;
+    const tick = setInterval(() => {
+      if (Date.now() >= revealAt && !revealed) setRevealed(true);
+    }, 200);
+    return () => clearInterval(tick);
+  }, [revealAt, revealed]);
 
-    const fireLeaderboard = async () => {
-      try {
-        const r = await fetch(`${API_BASE}/api/engagement/leaderboard?gamePk=${gamePk}`);
-        const data = await r.json();
-        if (cancelled) return;
-        if (data?.success) {
-          pushSystem(`🏆 Leaderboard (last 2m)\n${fmtLeaderboard(data)}`);
-        }
-      } catch {
-        /* ignore */
-      }
-    };
-
-    // kick off an immediate quiz so the room feels alive
-    fireQuiz();
-    quizTimer = setInterval(fireQuiz, QUIZ_MS);
-    leadTimer = setInterval(fireLeaderboard, LEADER_MS);
-
-    return () => {
-      cancelled = true;
-      if (quizTimer) clearInterval(quizTimer);
-      if (leadTimer) clearInterval(leadTimer);
-    };
+  const postLeaderboard = useCallback(async () => {
+    try {
+      const top = await fetchLeaderboard(gamePk, 5);
+      if (!top.length) return;
+      const lines = top.map((r, i) => `${i + 1}. ${r.name} — ${r.score}`).join("\n");
+      const sys: ChatMsg = {
+        gamePk,
+        name: "🏆 QuizBot",
+        text: `Leaderboard update:\n${lines}`,
+        ts: new Date().toISOString(),
+      };
+      setItems((prev) => [...prev, sys]);
+      scrollToBottom();
+    } catch {}
   }, [gamePk]);
 
-  // ---------- send ----------
+  useEffect(() => {
+    const t = setInterval(postLeaderboard, 120_000);
+    return () => clearInterval(t);
+  }, [postLeaderboard]);
+
+  const onVote = async (idx: number) => {
+    if (!quiz || selected !== null) return;
+    setSelected(idx);
+    try {
+      const res = await voteQuiz(gamePk, quiz.quizId, name || "You", idx);
+      setCorrectIndex(res.correctIndex);
+      setMyScore(res.myScore);
+      setRevealAt(Date.now() + 5000);
+    } catch (e: any) {
+      setErr(e?.message ?? "Vote failed");
+      setSelected(null);
+    }
+  };
+
   async function onSend() {
     const t = text.trim();
     if (!t) return;
     setText("");
-
-    // optimistic append
     const optimistic: ChatMsg = {
       gamePk,
       name: name || "You",
@@ -145,8 +135,7 @@ export default function ChatRoom({ gamePk, defaultName = "You" }: Props) {
       ts: new Date().toISOString(),
     };
     setItems((prev) => [...prev, optimistic]);
-    scrollToEnd();
-
+    scrollToBottom();
     try {
       await sendChat(gamePk, optimistic.name, t);
     } catch (e: any) {
@@ -154,8 +143,65 @@ export default function ChatRoom({ gamePk, defaultName = "You" }: Props) {
     }
   }
 
+  const renderQuiz = () => {
+    if (!quiz) return null;
+    const expired = quiz.expiresAt && Date.now() > new Date(quiz.expiresAt).getTime();
+
+    return (
+      <View style={q.card}>
+        <Text style={q.label}>Pop Quiz</Text>
+        <Text style={q.qtext}>{quiz.question}</Text>
+        <View style={{ height: 8 }} />
+
+        {quiz.options.map((opt, i) => {
+          const isPicked = selected === i;
+          const showReveal = revealed && correctIndex != null;
+          const isDisabled = selected !== null || !!expired;
+
+          const correctStyle = showReveal && correctIndex === i ? q.optCorrect : null;
+          const wrongStyle = showReveal && isPicked && correctIndex !== i ? q.optWrong : null;
+
+          return (
+            <Pressable
+              key={`${quiz.quizId}-${i}`}
+              onPress={!isDisabled ? () => onVote(i) : undefined}
+              accessibilityState={{ disabled: isDisabled }}
+              style={[
+                q.option,
+                isPicked && q.optionPicked,
+                correctStyle,
+                wrongStyle,
+                isDisabled && q.optionDisabled,
+              ]}
+            >
+              <Text style={q.optText}>
+                {String.fromCharCode(65 + i)}. {opt}
+              </Text>
+            </Pressable>
+          );
+        })}
+
+        {selected === null && !revealed ? (
+          <Text style={q.hint}>Tap an option to vote.</Text>
+        ) : !revealed ? (
+          <Text style={q.hint}>Answer locked. Revealing in 5s…</Text>
+        ) : (
+          <Text style={q.hint}>
+            {correctIndex != null && selected != null
+              ? selected === correctIndex
+                ? `✅ Correct! Your score: ${myScore}`
+                : `❌ Incorrect. Correct answer is ${String.fromCharCode(65 + correctIndex)}. Your score: ${myScore}`
+              : "Results revealed."}
+          </Text>
+        )}
+      </View>
+    );
+  };
+
   return (
     <View style={{ flex: 1 }}>
+      {renderQuiz()}
+
       <FlatList
         ref={listRef}
         data={items}
@@ -167,12 +213,10 @@ export default function ChatRoom({ gamePk, defaultName = "You" }: Props) {
           </View>
         )}
         contentContainerStyle={{ padding: 12, paddingBottom: 80 }}
-        onContentSizeChange={scrollToEnd}
+        onContentSizeChange={scrollToBottom}
       />
 
-      <KeyboardAvoidingView
-        behavior={Platform.select({ ios: "padding", android: undefined })}
-      >
+      <KeyboardAvoidingView behavior={Platform.select({ ios: "padding", android: undefined })}>
         <View style={s.composer}>
           <TextInput
             value={name}
@@ -188,17 +232,17 @@ export default function ChatRoom({ gamePk, defaultName = "You" }: Props) {
             placeholderTextColor="rgba(234,240,255,0.5)"
             style={[s.input, { flex: 1, marginLeft: 8 }]}
           />
-          <Pressable style={s.send} onPress={onSend} disabled={!text.trim()}>
+          <Pressable
+            style={[s.send, !text.trim() && { opacity: 0.6 }]}
+            onPress={text.trim() ? onSend : undefined}
+            accessibilityState={{ disabled: !text.trim() }}
+          >
             <Text style={{ color: "#0B1220", fontWeight: "900" }}>Send</Text>
           </Pressable>
         </View>
       </KeyboardAvoidingView>
 
-      {err ? (
-        <Text style={{ color: "salmon", paddingHorizontal: 12, paddingBottom: 8 }}>
-          {err}
-        </Text>
-      ) : null}
+      {err ? <Text style={{ color: "salmon", paddingHorizontal: 12, paddingBottom: 8 }}>{err}</Text> : null}
     </View>
   );
 }
@@ -239,4 +283,48 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+});
+
+const q = StyleSheet.create({
+  card: {
+    margin: 12,
+    marginBottom: 4,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+  label: {
+    color: "#A7F3D0",
+    fontWeight: "900",
+    marginBottom: 4,
+    fontSize: 12,
+    letterSpacing: 0.5,
+  },
+  qtext: { color: "#fff", fontWeight: "800", fontSize: 15 },
+  option: {
+    marginTop: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.16)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+  },
+  optionPicked: {
+    borderColor: "#93C5FD",
+    backgroundColor: "rgba(147,197,253,0.12)",
+  },
+  optionDisabled: { opacity: 0.85 },
+  optCorrect: {
+    borderColor: "#34D399",
+    backgroundColor: "rgba(52,211,153,0.18)",
+  },
+  optWrong: {
+    borderColor: "#F87171",
+    backgroundColor: "rgba(248,113,113,0.18)",
+  },
+  optText: { color: "#fff", fontWeight: "700" },
+  hint: { color: "rgba(255,255,255,0.7)", marginTop: 10, fontSize: 12 },
 });
